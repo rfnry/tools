@@ -1,0 +1,58 @@
+name: gate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: harness
+          POSTGRES_PASSWORD: harness
+          POSTGRES_DB: harness
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U harness"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      RFNRY_TEST_POSTGRES_URL: postgresql://harness:harness@localhost:5432/harness
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tools at the commit tools/versions pins, and the siblings .github/reads names
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REPOSITORY" = rfnry/tools ]; then
+            ln -s "$PWD" ../tools
+          else
+            commit=$(sed -n 's/^TOOLS_COMMIT=//p' tools/versions)
+            git init -q ../tools
+            git -C ../tools fetch -q --depth 1 https://github.com/rfnry/tools.git "$commit"
+            git -C ../tools -c advice.detachedHead=false checkout -q FETCH_HEAD
+          fi
+          if [ -f .github/reads ]; then
+            while read -r sibling; do
+              [ -z "$sibling" ] || git clone -q --depth 1 "https://github.com/rfnry/$sibling.git" "../$sibling"
+            done < .github/reads
+          fi
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: ${{ hashFiles('packages/python/pyproject.toml') != '' }}
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ hashFiles('packages/typescript/package.json') != '' }}
+        with:
+          node-version: "24"
+      - name: The gate
+        run: bash ../tools/scripts/gate.sh

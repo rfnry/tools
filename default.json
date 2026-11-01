@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "group:all"],
+  "draftPR": true,
+  "dependencyDashboard": false,
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "3 days",
+  "rebaseWhen": "behind-base-branch",
+  "prHourlyLimit": 0,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "groupName": "security fixes",
+    "groupSlug": "security-fixes",
+    "labels": ["security"],
+    "minimumReleaseAge": null
+  },
+  "osvVulnerabilityAlerts": true,
+  "github-actions": {
+    "enabled": false
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)tools/versions$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)\\n\\w+=(?<currentDigest>[0-9a-f]{40})"
+      ]
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["uses: rfnry/tools/\\.github/workflows/gate\\.yml@(?<currentDigest>[0-9a-f]{40})"],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/rfnry/tools",
+      "currentValueTemplate": "main"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDepNames": ["https://github.com/rfnry/tools"],
+      "groupName": "rfnry tools",
+      "groupSlug": "rfnry-tools",
+      "minimumReleaseAge": null
+    }
+  ]
+}
