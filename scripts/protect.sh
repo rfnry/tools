@@ -16,11 +16,12 @@ ruleset=$(cat <<'EOF'
   "rules": [
     {"type": "deletion"},
     {"type": "non_fast_forward"},
+    {"type": "required_linear_history"},
     {
       "type": "required_status_checks",
       "parameters": {
-        "strict_required_status_checks_policy": false,
-        "required_status_checks": [{"context": "ci / gate"}]
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [{"context": "ci / gate", "integration_id": 15368}]
       }
     }
   ]

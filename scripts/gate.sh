@@ -14,7 +14,8 @@ fi
 if [ -d packages/python ]; then
   (
     cd packages/python
-    uv sync --extra dev --quiet
+    uv lock --check
+    uv sync --locked --extra dev --quiet
     uv run --quiet python "$here/check-repo.py"
     uv run --quiet python "$here/lint-comment.py"
     uv run ruff check src tests
@@ -34,6 +35,7 @@ if [ -d packages/typescript ]; then
     npm run check
     npm run typecheck
     npm test
+    npm run --if-present test:integration
     npm run build
   )
 fi
