@@ -5,11 +5,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
-PINNED = re.compile(r"^\s*-?\s*uses:\s*(\S+)", re.MULTILINE)
-SHA = re.compile(r"@[0-9a-f]{40}$")
-GATE = re.compile(r"uses:\s*rfnry/tools/\.github/workflows/gate\.yml@([0-9a-f]{40})")
+SCRIPTS = Path(__file__).resolve().parent
+TEMPLATES = SCRIPTS.parent / "templates"
+PLACEHOLDER = b"TOOLS_COMMIT"
 HIDDEN = (".superpowers", "docs/superpowers")
+GITHUB = {".github/reads", ".github/postgres", *(f".github/workflows/{t.name}" for t in TEMPLATES.iterdir())}
 
 
 def files(repo: Path) -> list[str]:
@@ -20,6 +20,15 @@ def files(repo: Path) -> list[str]:
         check=True,
     ).stdout.split("\n")
     return sorted(name for name in listed if name and (repo / name).is_file())
+
+
+def postgres(repo: Path) -> list[str]:
+    if not (repo / ".github" / "postgres").is_file():
+        return []
+    plan = subprocess.run(["bash", str(SCRIPTS / "plan.sh")], cwd=repo, capture_output=True, text=True)
+    if plan.returncode == 0:
+        return []
+    return [line for line in plan.stderr.splitlines() if line] or ["check-repo: tools' plan.sh refused .github/postgres"]
 
 
 def problems(repo: Path) -> list[str]:
@@ -40,107 +49,88 @@ def problems(repo: Path) -> list[str]:
         found.append("check-repo: tools/versions must pin TOOLS_COMMIT=<40-hex commit>")
     if not (repo / ".github" / "reads").is_file():
         found.append("check-repo: .github/reads must list the siblings the gate checks out, one per line")
-    workflows = sorted(name for name in names if name.startswith(".github/workflows/"))
-    allowed = {".github/workflows/ci.yml", *(f".github/workflows/{t.name}" for t in TEMPLATES.iterdir())}
-    for name in workflows:
-        if name not in allowed:
-            found.append(f"check-repo: {name} is not ci.yml or a publish workflow of tools/templates")
-    for template in sorted(TEMPLATES.iterdir()):
-        name = f".github/workflows/{template.name}"
-        if name in workflows and (repo / name).read_bytes() != template.read_bytes():
-            found.append(f"check-repo: {name} differs from tools/templates/{template.name}")
-    ci = repo / ".github" / "workflows" / "ci.yml"
-    if not ci.is_file():
+    for name in names:
+        if name.startswith(".github/") and name not in GITHUB:
+            found.append(f"check-repo: {name} is not ci.yml, a publish workflow of tools/templates, reads or postgres")
+    if not (repo / ".github" / "workflows" / "ci.yml").is_file():
         found.append("check-repo: .github/workflows/ci.yml is missing")
-    else:
-        text = ci.read_text(encoding="utf-8")
-        gate = GATE.search(text)
-        if gate is None:
-            found.append("check-repo: ci.yml must call rfnry/tools/.github/workflows/gate.yml at a commit")
-        elif pinned is not None and gate.group(1) != pinned.group(1):
-            found.append("check-repo: ci.yml calls the gate at another commit than tools/versions pins")
-        if "!github.event.pull_request.draft" not in text:
-            found.append("check-repo: ci.yml must run nothing on a draft pull request")
-    for name in workflows:
-        text = (repo / name).read_text(encoding="utf-8")
-        if not re.search(r"^permissions:\s*\n\s+contents: read", text, re.MULTILINE):
-            found.append(f"check-repo: {name} must grant contents: read at the top")
-        for action in PINNED.findall(text):
-            if not action.startswith("./") and not SHA.search(action):
-                found.append(f"check-repo: {name} uses {action}, which is not pinned by commit")
+    for template in sorted(TEMPLATES.iterdir()):
+        workflow = repo / ".github" / "workflows" / template.name
+        expected = template.read_bytes()
+        if PLACEHOLDER in expected:
+            if pinned is None:
+                continue
+            expected = expected.replace(PLACEHOLDER, pinned.group(1).encode())
+        if workflow.is_file() and workflow.read_bytes() != expected:
+            found.append(f"check-repo: .github/workflows/{template.name} differs from tools/templates/{template.name}")
+    found.extend(postgres(repo))
     return found
 
 
-GOOD_CI = """name: ci
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  ci:
-    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
-    uses: rfnry/tools/.github/workflows/gate.yml@COMMIT
-"""
+COMMIT = "a" * 40
+CI = (TEMPLATES / "ci.yml").read_text(encoding="utf-8").replace("TOOLS_COMMIT", COMMIT)
 
 
 def planted(scratch: Path, change: str) -> Path:
-    repo = scratch / change
+    repo = scratch / str(len(list(scratch.iterdir())))
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    commit = "a" * 40
     (repo / "CLAUDE.md").write_text("see the design ([rfnry: design-leads])\n", encoding="utf-8")
     (repo / "tools").mkdir()
-    (repo / "tools" / "versions").write_text(f"TOOLS_COMMIT={commit}\n", encoding="utf-8")
+    (repo / "tools" / "versions").write_text(f"TOOLS_COMMIT={COMMIT}\n", encoding="utf-8")
     (repo / ".github" / "workflows").mkdir(parents=True)
-    (repo / ".github" / "reads").write_text("", encoding="utf-8")
-    (repo / ".github" / "workflows" / "ci.yml").write_text(GOOD_CI.replace("COMMIT", commit), encoding="utf-8")
+    (repo / ".github" / "reads").write_text("engine\n", encoding="utf-8")
+    (repo / ".github" / "postgres").write_text("16\n17\n18\n", encoding="utf-8")
+    (repo / ".github" / "workflows" / "ci.yml").write_text(CI, encoding="utf-8")
     shutil.copy(TEMPLATES / "publish-pypi.yml", repo / ".github" / "workflows" / "publish-pypi.yml")
+    shutil.copy(TEMPLATES / "publish-npm.yml", repo / ".github" / "workflows" / "publish-npm.yml")
     (repo / "docs").mkdir()
     (repo / "docs" / "guide.md").write_text("# guide\n", encoding="utf-8")
-    if change == "a plan in docs":
-        (repo / "docs" / "plans").mkdir()
-        (repo / "docs" / "plans" / "plan.md").write_text("# plan\n", encoding="utf-8")
-    elif change == "a .superpowers folder":
-        (repo / ".superpowers").mkdir()
-    elif change == "no citation":
-        (repo / "CLAUDE.md").write_text("# rules\n", encoding="utf-8")
-    elif change == "no pin":
-        (repo / "tools" / "versions").write_text("TOOLS_COMMIT=main\n", encoding="utf-8")
-    elif change == "no reads":
-        (repo / ".github" / "reads").unlink()
-    elif change == "a stray workflow":
-        (repo / ".github" / "workflows" / "tests.yml").write_text("permissions:\n  contents: read\n", encoding="utf-8")
-    elif change == "a drifted publish workflow":
-        (repo / ".github" / "workflows" / "publish-pypi.yml").write_text("name: changed\n", encoding="utf-8")
-    elif change == "a gate at another commit":
-        ci = GOOD_CI.replace("COMMIT", "b" * 40)
-        (repo / ".github" / "workflows" / "ci.yml").write_text(ci, encoding="utf-8")
-    elif change == "ci on drafts":
-        ci = GOOD_CI.replace("COMMIT", commit).replace(" || !github.event.pull_request.draft", "")
-        (repo / ".github" / "workflows" / "ci.yml").write_text(ci, encoding="utf-8")
-    elif change == "an action by tag":
-        ci = GOOD_CI.replace("COMMIT", commit) + "      - uses: actions/checkout@v7\n"
-        (repo / ".github" / "workflows" / "ci.yml").write_text(ci, encoding="utf-8")
-    elif change == "write permissions":
-        ci = GOOD_CI.replace("COMMIT", commit).replace("contents: read", "contents: write")
-        (repo / ".github" / "workflows" / "ci.yml").write_text(ci, encoding="utf-8")
+    if change in CHANGES:
+        _, apply, *arguments = CHANGES[change]
+        apply(repo, *arguments)
     return repo
 
 
+def put(repo: Path, name: str, text: str) -> None:
+    (repo / name).parent.mkdir(parents=True, exist_ok=True)
+    (repo / name).write_text(text, encoding="utf-8")
+
+
+def remove(repo: Path, name: str) -> None:
+    (repo / name).unlink()
+
+
+def ci(repo: Path, old: str, new: str) -> None:
+    put(repo, ".github/workflows/ci.yml", CI.replace(old, new, 1))
+
+
 CHANGES = {
-    "a plan in docs": "is not a page of the guide",
-    "a .superpowers folder": ".superpowers exists",
-    "no citation": "must cite the design",
-    "no pin": "must pin TOOLS_COMMIT",
-    "no reads": ".github/reads must list",
-    "a stray workflow": "is not ci.yml or a publish workflow",
-    "a drifted publish workflow": "differs from tools/templates",
-    "a gate at another commit": "at another commit than tools/versions",
-    "ci on drafts": "run nothing on a draft",
-    "an action by tag": "not pinned by commit",
-    "write permissions": "must grant contents: read",
+    "a plan in docs": ("is not a page of the guide", put, "docs/plans/plan.md", "# plan\n"),
+    "an image in docs": ("is not a page of the guide", put, "docs/flow.png", "png"),
+    "a .superpowers folder": (".superpowers exists", put, ".superpowers/notes.md", "# notes\n"),
+    "a docs/superpowers folder": ("docs/superpowers exists", put, "docs/superpowers/notes.md", "# notes\n"),
+    "no CLAUDE.md": ("must cite the design", remove, "CLAUDE.md"),
+    "no citation": ("must cite the design", put, "CLAUDE.md", "# rules\n"),
+    "no tools/versions": ("must pin TOOLS_COMMIT", remove, "tools/versions"),
+    "no pin": ("must pin TOOLS_COMMIT", put, "tools/versions", "TOOLS_COMMIT=main\n"),
+    "no reads": (".github/reads must list", remove, ".github/reads"),
+    "a stray workflow": ("tests.yml is not ci.yml", put, ".github/workflows/tests.yml", "name: tests\n"),
+    "a dependabot.yml": ("dependabot.yml is not ci.yml", put, ".github/dependabot.yml", "version: 2\n"),
+    "a local action": ("action.yml is not ci.yml", put, ".github/actions/x/action.yml", "runs:\n  using: composite\n"),
+    "a drifted publish workflow": ("publish-pypi.yml differs from", put, ".github/workflows/publish-pypi.yml", "name: changed\n"),
+    "no ci.yml": ("ci.yml is missing", remove, ".github/workflows/ci.yml"),
+    "a gate at another commit": ("ci.yml differs from tools/templates/ci.yml", ci, COMMIT, "b" * 40),
+    "ci on drafts": ("ci.yml differs from", ci, " || !github.event.pull_request.draft", ""),
+    "the draft guard in a comment": ("ci.yml differs from", ci, "    if: ", "    # "),
+    "a write permission": ("ci.yml differs from", ci, "  contents: read\n", "  contents: read\n  pull-requests: write\n"),
+    "a push trigger": ("ci.yml differs from", ci, "  workflow_dispatch:\n", "  workflow_dispatch:\n  push:\n"),
+    "a pull_request_target trigger": ("ci.yml differs from", ci, "  pull_request:\n", "  pull_request_target:\n"),
+    "a second job": ("ci.yml differs from", ci, "jobs:\n", "jobs:\n  other:\n    runs-on: ubuntu-24.04\n    steps: [{uses: actions/checkout@v4}]\n"),
+    "a comment in ci.yml": ("ci.yml differs from", ci, "name: ci\n", "name: ci\n# why\n"),
+    "postgres without a final newline": ("does not end with a newline", put, ".github/postgres", "16\n17"),
+    "postgres naming an unpinned version": ("a version tools pins no image for", put, ".github/postgres", "15\n"),
+    "postgres naming a version twice": ("names 16 twice", put, ".github/postgres", "16\n16\n"),
 }
 
 
@@ -150,7 +140,7 @@ def self_test() -> list[str]:
         clean = problems(planted(Path(scratch), "clean"))
         if clean:
             failed.append(f"check-repo: the self-test's clean repository failed: {clean}")
-        for change, expected in CHANGES.items():
+        for change, (expected, *_) in CHANGES.items():
             if not any(expected in problem for problem in problems(planted(Path(scratch), change))):
                 failed.append(f"check-repo: the self-test planted {change} and the check passed")
     return failed
