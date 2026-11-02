@@ -6,8 +6,11 @@ implements (`[rfnry: one-ci-shape]`, `[rfnry: ci-least-access]`, `[rfnry: code-d
 
 - Every library pins one commit of this repository: `TOOLS_COMMIT` in its `tools/versions`, and the same commit in its
   `ci.yml`'s `uses: rfnry/tools/.github/workflows/gate.yml@<commit>`. Renovate proposes each bump, as a draft.
-- `gate.yml` checks the caller out, fetches this repository at the caller's `TOOLS_COMMIT` beside it, clones the
-  siblings the caller's `.github/reads` names, and runs `scripts/gate.sh`, which acts on the repository it runs in
+- `gate.yml` runs the gate once per Postgres version the caller's `.github/postgres` names (once, with none, for a
+  repository that stores nothing), each on its image pinned by digest here; a last job, `gate`, passes only when every
+  run did, and is the one check `main` requires. Each run checks the caller out, fetches this repository at the
+  caller's `TOOLS_COMMIT` beside it, clones the siblings the caller's `.github/reads` names, and runs
+  `scripts/gate.sh`, which acts on the repository it runs in
   (`git rev-parse --show-toplevel`): `check-repo.py`, `lint-comment.py`, the Python gate and the TypeScript gate; a
   repository without `packages/` runs its own `make check`. Locally, from a library's primary checkout: `bash ../tools/scripts/gate.sh`; from one of its worktrees: `bash ../../../tools/scripts/gate.sh`.
 - `templates/` holds the publish workflows; a library's copies must equal them, byte for byte, since trusted publishing
