@@ -156,16 +156,19 @@ def self_test() -> list[str]:
     return failed
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
+
+
 def main(args: list[str]) -> int:
     if args[:1] == ["--self-test"]:
         found = self_test()
         print("\n".join(found) if found else f"check-repo: the self-test fails all {len(CHANGES)} planted problems")
         return 1 if found else 0
-    repo = Path(
-        subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    )
+    repo = Path(git("rev-parse", "--show-toplevel"))
+    name = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent.name
     found = problems(repo)
-    print("\n".join(found) if found else f"check-repo: {repo.name} has the shape of an rfnry library")
+    print("\n".join(found) if found else f"check-repo: {name} has the shape of an rfnry library")
     return 1 if found else 0
 
 

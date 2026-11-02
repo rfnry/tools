@@ -9,7 +9,7 @@ implements (`[rfnry: one-ci-shape]`, `[rfnry: ci-least-access]`, `[rfnry: code-d
 - `gate.yml` checks the caller out, fetches this repository at the caller's `TOOLS_COMMIT` beside it, clones the
   siblings the caller's `.github/reads` names, and runs `scripts/gate.sh`, which acts on the repository it runs in
   (`git rev-parse --show-toplevel`): `check-repo.py`, `lint-comment.py`, the Python gate and the TypeScript gate; a
-  repository without `packages/` runs its own `make check`. Locally, from a library: `bash ../tools/scripts/gate.sh`.
+  repository without `packages/` runs its own `make check`. Locally, from a library's primary checkout: `bash ../tools/scripts/gate.sh`; from one of its worktrees: `bash ../../../tools/scripts/gate.sh`.
 - `templates/` holds the publish workflows; a library's copies must equal them, byte for byte, since trusted publishing
   takes no reusable workflow.
 - `scripts/protect.sh rfnry/<name>` puts the `main` ruleset on a repository (the `ci / gate` check required, no

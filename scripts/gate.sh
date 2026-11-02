@@ -3,6 +3,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(git rev-parse --show-toplevel)
+name=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
 cd "$repo"
 
 if [ ! -d packages ]; then
@@ -37,4 +38,4 @@ if [ -d packages/typescript ]; then
   )
 fi
 
-echo "gate: $(basename "$repo") passed"
+echo "gate: $name passed"

@@ -188,19 +188,22 @@ def self_test() -> list[str]:
     return failed
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
+
+
 def main(args: list[str]) -> int:
     if args[:1] == ["--self-test"]:
         found = self_test()
         print("\n".join(found) if found else f"lint-comment: the self-test fails all {len(PLANTED)} planted comments")
         return 1 if found else 0
-    repo = Path(
-        subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
-    )
+    repo = Path(git("rev-parse", "--show-toplevel"))
+    name = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent.name
     found, scanned = problems(repo)
     if not scanned:
-        print(f"lint-comment: {repo.name} holds no code to scan")
+        print(f"lint-comment: {name} holds no code to scan")
         return 1
-    print("\n".join(found) if found else f"lint-comment: {scanned} files of {repo.name}, no comment and no docstring")
+    print("\n".join(found) if found else f"lint-comment: {scanned} files of {name}, no comment and no docstring")
     return 1 if found else 0
 
 
