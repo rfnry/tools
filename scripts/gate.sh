@@ -20,7 +20,7 @@ if [ -d packages/python ]; then
     uv run ruff check src tests
     uv run ruff format --check src tests
     uv run mypy
-    uv run pytest -q -p no:cacheprovider
+    uv run pytest -q -p no:cacheprovider -m "not live"
   )
 else
   python3 "$here/check-repo.py"
