@@ -5,7 +5,7 @@ clone() {
   local sibling=$1 branch=$2 url="https://github.com/rfnry/$1.git" ref=main status=2
   if [ -n "$branch" ]; then
     status=0
-    git ls-remote --exit-code "$url" "refs/heads/$branch" >/dev/null || status=$?
+    git ls-remote --exit-code "$url" "refs/heads/$branch" </dev/null >/dev/null || status=$?
   fi
   case "$status" in
     0) ref=$branch ;;
@@ -15,7 +15,7 @@ clone() {
       return 1
       ;;
   esac
-  git clone -q --depth 1 --branch "$ref" "$url" "../$sibling" || {
+  git clone -q --depth 1 --branch "$ref" "$url" "../$sibling" </dev/null || {
     echo "siblings: rfnry/$sibling cannot be cloned at $ref" >&2
     return 1
   }
@@ -102,6 +102,10 @@ self_test() {
   cloned "repository without .github/reads" absent track ""
   cloned "empty .github/reads" "" track ""
   cloned "last sibling without a newline" 'memory\nthread' "" "memory:main thread:main "
+  mkdir -p "$scratch/bin"
+  printf '#!/usr/bin/env bash\ncase "$1" in clone | ls-remote) cat >/dev/null ;; esac\nexec %q "$@"\n' "$(command -v git)" >"$scratch/bin/git"
+  chmod +x "$scratch/bin/git"
+  PATH="$scratch/bin:$PATH" cloned "siblings cloned by a git that reads its input" 'engine\nmemory\n' track "engine:track memory:main "
 
   local planted=0
   while IFS='|' read -r name reads branch expected; do
