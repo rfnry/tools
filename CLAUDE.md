@@ -7,13 +7,13 @@ implements (`[rfnry: one-ci-shape]`, `[rfnry: ci-least-access]`, `[rfnry: code-d
 - Every library pins one commit of this repository: `TOOLS_COMMIT` in its `tools/versions`, and the same commit in its
   `ci.yml`. Pins move by hand until Renovate is installed on the organization; `default.json` is the preset each
   repository extends, and `renovate.json` this repository's own (its Actions and the pgvector digests of `plan.sh`).
-- `gate.yml` runs the gate once per Postgres version the caller's `.github/postgres` names (once, with none, for a
-  repository that stores nothing), each on its image pinned by digest in `scripts/plan.sh`; a last job, `gate`, passes
-  only when every run did, and is the one check `main` requires. Each job fetches this repository beside the caller at
-  the caller's `TOOLS_COMMIT`; on this repository's own CI the checkout is already the tools beside, and nothing is
+- `gate.yml` runs one `test` job, on Postgres 18 when the caller's `.github/postgres` names it and with no database
+  URL for a repository that stores nothing, on the image pinned by digest in `scripts/plan.sh`; a last job, `gate`,
+  passes only when `test` did, and is the one check `main` requires. Each job fetches this repository beside the caller
+  at the caller's `TOOLS_COMMIT`; on this repository's own CI the checkout is already the tools beside, and nothing is
   fetched. `plan` runs `pin.sh` (that commit is 40 hex, is the one `ci.yml` calls, and is what was fetched) and
-  `plan.sh` (every line of `.github/postgres` a version pinned here, once, the file ending in a newline). Each `test`
-  run clones the siblings `.github/reads` names with `siblings.sh`, each at the pull request's branch when the sibling
+  `plan.sh` (`.github/postgres` names only 18, the one version pinned here, once, the file ending in a newline).
+  `test` clones the siblings `.github/reads` names with `siblings.sh`, each at the pull request's branch when the sibling
   has a branch of that name, else at `main`, and runs `scripts/gate.sh`, which acts on the repository it runs in
   (`git rev-parse --show-toplevel`): `check-repo.py`, `lint-comment.py`, the Python gate (`uv lock --check` first) and
   the TypeScript gate (`test:integration` too where a package has it); a repository without `packages/` runs its own
