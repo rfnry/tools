@@ -80,7 +80,7 @@ def planted(scratch: Path, change: str) -> Path:
     (repo / "tools" / "versions").write_text(f"TOOLS_COMMIT={COMMIT}\n", encoding="utf-8")
     (repo / ".github" / "workflows").mkdir(parents=True)
     (repo / ".github" / "reads").write_text("engine\n", encoding="utf-8")
-    (repo / ".github" / "postgres").write_text("16\n17\n18\n", encoding="utf-8")
+    (repo / ".github" / "postgres").write_text("18\n", encoding="utf-8")
     (repo / ".github" / "workflows" / "ci.yml").write_text(CI, encoding="utf-8")
     shutil.copy(TEMPLATES / "publish-pypi.yml", repo / ".github" / "workflows" / "publish-pypi.yml")
     shutil.copy(TEMPLATES / "publish-npm.yml", repo / ".github" / "workflows" / "publish-npm.yml")
@@ -128,9 +128,9 @@ CHANGES = {
     "a pull_request_target trigger": ("ci.yml differs from", ci, "  pull_request:\n", "  pull_request_target:\n"),
     "a second job": ("ci.yml differs from", ci, "jobs:\n", "jobs:\n  other:\n    runs-on: ubuntu-24.04\n    steps: [{uses: actions/checkout@v4}]\n"),
     "a comment in ci.yml": ("ci.yml differs from", ci, "name: ci\n", "name: ci\n# why\n"),
-    "postgres without a final newline": ("does not end with a newline", put, ".github/postgres", "16\n17"),
-    "postgres naming an unpinned version": ("a version tools pins no image for", put, ".github/postgres", "15\n"),
-    "postgres naming a version twice": ("names 16 twice", put, ".github/postgres", "16\n16\n"),
+    "postgres without a final newline": ("does not end with a newline", put, ".github/postgres", "18"),
+    "postgres naming an older version": ("a version tools pins no image for", put, ".github/postgres", "17\n"),
+    "postgres naming a version twice": ("names 18 twice", put, ".github/postgres", "18\n18\n"),
 }
 
 

@@ -3,15 +3,13 @@ set -euo pipefail
 
 image() {
   case "$1" in
-    16) echo "pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f" ;;
-    17) echo "pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8" ;;
     18) echo "pgvector/pgvector:pg18@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47" ;;
     *) return 1 ;;
   esac
 }
 
 plan() {
-  local file=$1 entries=() seen=" " version number=0
+  local file=$1 planned=none seen=" " version number=0
   if [ -s "$file" ]; then
     if [ -n "$(tail -c 1 "$file")" ]; then
       echo "plan: .github/postgres does not end with a newline" >&2
@@ -28,11 +26,11 @@ plan() {
         return 1
       fi
       seen+="$version "
-      entries+=("{\"version\":\"$version\",\"image\":\"$(image "$version")\"}")
+      planned=$version
     done <"$file"
   fi
-  [ "${#entries[@]}" -gt 0 ] || entries=("{\"version\":\"none\",\"image\":\"$(image 16)\"}")
-  echo "postgres=[$(IFS=,; echo "${entries[*]}")]"
+  echo "postgres=$planned"
+  echo "image=$(image 18)"
 }
 
 expect() {
@@ -44,7 +42,7 @@ expect() {
   if [ -n "$problem" ] && { [ -n "$out" ] || [[ $err != *"$problem"* ]]; }; then
     echo "plan: the self-test planted $name and the plan passed: $out"
     failed=1
-  elif [ -z "$problem" ] && [ "$out" != "postgres=[$output]" ]; then
+  elif [ -z "$problem" ] && [ "$out" != "$output" ]; then
     echo "plan: the self-test's $name planned $out $err"
     failed=1
   fi
@@ -55,31 +53,30 @@ self_test() {
   trap 'rm -rf "$scratch"' EXIT
   cases=0
   failed=0
-  local none pg16 pg17 pg18
-  none="{\"version\":\"none\",\"image\":\"$(image 16)\"}"
-  pg16="{\"version\":\"16\",\"image\":\"$(image 16)\"}"
-  pg17="{\"version\":\"17\",\"image\":\"$(image 17)\"}"
-  pg18="{\"version\":\"18\",\"image\":\"$(image 18)\"}"
+  local none pg18
+  none="postgres=none
+image=$(image 18)"
+  pg18="postgres=18
+image=$(image 18)"
   expect "no file" absent "$none" ""
   expect "an empty file" "" "$none" ""
-  expect "three versions" '16\n17\n18\n' "$pg16,$pg17,$pg18" ""
-  expect "one version" '17\n' "$pg17" ""
+  expect "Postgres 18" '18\n' "$pg18" ""
   local planted=0
   while IFS='|' read -r name content problem; do
     planted=$((planted + 1))
     expect "$name" "$content" "" "$problem"
   done <<'EOF'
-a last line without a newline|16\n17\n18|does not end with a newline
-one version without a newline|17|does not end with a newline
-a version with no pinned image|15\n16\n|line 1 names '15'
-an unpinned last version|16\n15\n|line 2 names '15'
-a version twice|16\n16\n|names 16 twice
-a blank line|16\n\n17\n|line 2 names ''
-a carriage return|16\r\n|line 1 names $'16\r'
-a padded version|  16\n|line 1 names '  16'
-two versions on one line|16 17\n|line 1 names '16 17'
-a comment|# versions\n16\n|line 1 names '# versions'
-JSON in a version|16","image":"evil\n|line 1 names
+a last line without a newline|18|does not end with a newline
+an older version|17\n|line 1 names '17'
+an older version beside 18|18\n16\n|line 2 names '16'
+a version with no pinned image|15\n|line 1 names '15'
+a version twice|18\n18\n|names 18 twice
+a blank line|18\n\n|line 2 names ''
+a carriage return|18\r\n|line 1 names $'18\r'
+a padded version|  18\n|line 1 names '  18'
+two versions on one line|18 18\n|line 1 names '18 18'
+a comment|# versions\n18\n|line 1 names '# versions'
+an output in a version|18\nimage=evil\n|line 2 names 'image=evil'
 a command in a version|$(touch planted)\n|line 1 names
 EOF
   if [ -e planted ] || [ -e "$scratch/planted" ]; then

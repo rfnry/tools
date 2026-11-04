@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       postgres: ${{ steps.plan.outputs.postgres }}
+      image: ${{ steps.plan.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,7 +26,7 @@ jobs:
       - name: The commit tools/versions and ci.yml pin, and the tools fetched at it
         if: ${{ github.repository != 'rfnry/tools' }}
         run: bash ../tools/scripts/pin.sh
-      - name: The Postgres versions .github/postgres names, each with its pinned image
+      - name: The Postgres .github/postgres names, and its pinned image
         id: plan
         run: bash ../tools/scripts/plan.sh >> "$GITHUB_OUTPUT"
 
@@ -33,27 +34,22 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        postgres: ${{ fromJSON(needs.plan.outputs.postgres) }}
-    name: test (postgres ${{ matrix.postgres.version }})
     services:
       postgres:
-        image: ${{ matrix.postgres.image }}
+        image: ${{ needs.plan.outputs.image }}
         env:
-          POSTGRES_USER: harness
-          POSTGRES_PASSWORD: harness
-          POSTGRES_DB: harness
+          POSTGRES_USER: rfnry
+          POSTGRES_PASSWORD: rfnry
+          POSTGRES_DB: rfnry
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U harness"
+          --health-cmd "pg_isready -U rfnry"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
     env:
-      RFNRY_TEST_POSTGRES_URL: ${{ matrix.postgres.version != 'none' && 'postgresql://harness:harness@localhost:5432/harness' || '' }}
+      RFNRY_TEST_POSTGRES_URL: ${{ needs.plan.outputs.postgres != 'none' && 'postgresql://rfnry:rfnry@localhost:5432/rfnry' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
